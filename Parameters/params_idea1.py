@@ -12,7 +12,7 @@ from typing import List
 class Idea1Params:
     # --- Data ---
     n_subjects: int = 30
-    atlas_name: str = "msdl"           # 'msdl' | 'schaefer100' | 'schaefer200'
+    atlas_name: str = "schaefer200"           # 'msdl' | 'schaefer100' | 'schaefer200'
     standardize: str = "zscore_sample"
     detrend: bool = True
     low_pass: float = 0.1
