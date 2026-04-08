@@ -46,9 +46,38 @@ class ADHDDataLoader:
         import pandas as pd
         if isinstance(phenotypic, pd.DataFrame):
             col_names = list(phenotypic.columns)
+            phenotypic = phenotypic.reset_index(drop=True)
         else:
             col_names = list(phenotypic.dtype.names)
         print(f"  Phenotypic columns: {col_names}")
+
+        # phenotypic has one row per unique subject; func may have more files
+        # (multiple scan sessions per subject). Use one scan per subject only.
+        n_subjects = len(phenotypic)
+        if len(fmri_filenames) > n_subjects:
+            print(f"  Note: {len(fmri_filenames)} scans found for {n_subjects} subjects "
+                  f"(multi-session). Using first scan per subject.")
+            fmri_filenames = fmri_filenames[:n_subjects]
+
+        # Log which column name was resolved for each field (done once on first row)
+        severity_candidates = ["ADHD_Index", "adhd_index", "ADHD_Measure",
+                               "conn_adhd", "dsm_iv_tot", "dsm_iv_inatt"]
+        resolved_label_col  = next((c for c in ["ADHD", "adhd", "DX", "dx"] if c in col_names), None)
+        resolved_sev_col    = next((c for c in severity_candidates if c in col_names), None)
+        resolved_age_col    = next((c for c in ["Age", "age"] if c in col_names), None)
+        resolved_sex_col    = next((c for c in ["Gender", "gender", "Sex", "sex"] if c in col_names), None)
+        print(f"  Field mapping  → label='{resolved_label_col}', "
+              f"severity='{resolved_sev_col}', "
+              f"age='{resolved_age_col}', sex='{resolved_sex_col}'")
+
+        # Log all severity-related column values available in the DataFrame
+        if isinstance(phenotypic, pd.DataFrame):
+            sev_cols = [c for c in severity_candidates if c in col_names]
+            if sev_cols:
+                sev_summary = phenotypic[sev_cols].describe().round(2).to_string()
+                print(f"  Severity columns summary:\n{sev_summary}")
+                nan_counts = phenotypic[sev_cols].isna().sum().to_dict()
+                print(f"  NaN counts: {nan_counts}")
 
         records: List[SubjectRecord] = []
         for i, func_path in enumerate(fmri_filenames):
@@ -60,10 +89,12 @@ class ADHDDataLoader:
             subject_id = self._get_field(row, col_names, ["Subject", "subject_id"], default=str(i))
             adhd_label = int(self._get_field(row, col_names, ["ADHD", "adhd", "DX", "dx"], default=0))
             age = float(self._get_field(row, col_names, ["Age", "age"], default=np.nan))
-            sex = int(self._get_field(row, col_names, ["Gender", "gender", "Sex", "sex"], default=0))
+            sex_raw = self._get_field(row, col_names, ["Gender", "gender", "Sex", "sex"], default=0)
+            sex = self._parse_sex(sex_raw)
             adhd_measure = float(
                 self._get_field(row, col_names,
-                                ["ADHD_Index", "adhd_index", "ADHD_Measure"], default=np.nan)
+                                ["ADHD_Index", "adhd_index", "ADHD_Measure",
+                                 "conn_adhd", "dsm_iv_tot", "dsm_iv_inatt"], default=np.nan)
             )
             records.append(SubjectRecord(
                 subject_id=str(subject_id),
@@ -99,6 +130,17 @@ class ADHDDataLoader:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_sex(value) -> int:
+        """Convert sex field to int. Handles 'M'/'F', 1/0, True/False, NaN."""
+        if isinstance(value, str):
+            return 1 if value.strip().upper() in ("M", "MALE", "1") else 0
+        try:
+            v = float(value)
+            return 0 if np.isnan(v) else int(v)
+        except (TypeError, ValueError):
+            return 0
 
     @staticmethod
     def _get_field(row, col_names: list, candidates: List[str], default):

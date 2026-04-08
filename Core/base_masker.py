@@ -1,6 +1,9 @@
 """
 Core/base_masker.py
-Wraps nilearn's NiftiLabelsMasker + atlas fetching to extract ROI time series.
+Wraps nilearn maskers + atlas fetching to extract ROI time series.
+
+MSDL is a probabilistic (4D) atlas → uses NiftiMapsMasker.
+Schaefer is a hard-label (3D) atlas → uses NiftiLabelsMasker.
 """
 
 from __future__ import annotations
@@ -9,30 +12,24 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 from nilearn import datasets
-from nilearn.maskers import NiftiLabelsMasker
+from nilearn.maskers import NiftiLabelsMasker, NiftiMapsMasker
 
 from Core.utils import SubjectRecord
 
-
-# Atlas names supported → fetch function + img/labels extraction
-_ATLAS_REGISTRY = {
-    "msdl": "_fetch_msdl",
-    "schaefer100": "_fetch_schaefer",
-    "schaefer200": "_fetch_schaefer",
-}
+# Atlases that are probabilistic (4D) and need NiftiMapsMasker
+_PROBABILISTIC_ATLASES = {"msdl"}
 
 
 class ROIMasker:
     """
-    Fetches an atlas, fits a NiftiLabelsMasker, and extracts ROI time series
-    for each SubjectRecord.
+    Fetches an atlas and extracts ROI time series for each SubjectRecord.
 
     Parameters
     ----------
     atlas_name : str
         One of 'msdl', 'schaefer100', 'schaefer200'.
     standardize : str or bool
-        Passed to NiftiLabelsMasker. 'zscore_sample' recommended.
+        'zscore_sample' recommended for correlation stability.
     detrend : bool
     low_pass, high_pass : float
         Band-pass filter bounds (Hz).
@@ -61,7 +58,7 @@ class ROIMasker:
         self.memory_level = memory_level
 
         # Set after fit()
-        self.masker_: Optional[NiftiLabelsMasker] = None
+        self.masker_ = None
         self.roi_labels_: Optional[List[str]] = None
         self.n_rois_: Optional[int] = None
 
@@ -69,13 +66,12 @@ class ROIMasker:
     # Public API
     # ------------------------------------------------------------------
 
-    def fit(self) -> "ROIMasker":
+    def fit(self, example_img=None) -> "ROIMasker":
         atlas_img, roi_labels = self._fetch_atlas()
         self.roi_labels_ = roi_labels
         self.n_rois_ = len(roi_labels)
 
-        self.masker_ = NiftiLabelsMasker(
-            labels_img=atlas_img,
+        common_kwargs = dict(
             standardize=self.standardize,
             detrend=self.detrend,
             low_pass=self.low_pass,
@@ -84,7 +80,14 @@ class ROIMasker:
             memory_level=self.memory_level,
             verbose=0,
         )
-        self.masker_.fit()
+
+        if self.atlas_name.lower() in _PROBABILISTIC_ATLASES:
+            self.masker_ = NiftiMapsMasker(maps_img=atlas_img, **common_kwargs)
+        else:
+            self.masker_ = NiftiLabelsMasker(labels_img=atlas_img, **common_kwargs)
+
+        # Passing an example image avoids the resampling-at-transform-time warning
+        self.masker_.fit(example_img)
         print(f"  ROIMasker fitted: atlas='{self.atlas_name}', n_rois={self.n_rois_}")
         return self
 
@@ -104,7 +107,9 @@ class ROIMasker:
         return valid
 
     def fit_transform(self, records: List[SubjectRecord]) -> List[SubjectRecord]:
-        return self.fit().transform(records)
+        # Pass first image to fit() so the masker pre-resamples (avoids warnings)
+        example_img = records[0].func_path if records else None
+        return self.fit(example_img=example_img).transform(records)
 
     # ------------------------------------------------------------------
     # Atlas fetching
@@ -120,18 +125,18 @@ class ROIMasker:
         else:
             raise ValueError(
                 f"Unknown atlas '{self.atlas_name}'. "
-                f"Supported: {list(_ATLAS_REGISTRY.keys())}"
+                f"Supported: 'msdl', 'schaefer100', 'schaefer200'"
             )
 
     @staticmethod
     def _fetch_msdl() -> Tuple[object, List[str]]:
         atlas = datasets.fetch_atlas_msdl()
         labels = list(atlas.labels)
-        return atlas.maps, labels
+        return atlas.maps, labels   # atlas.maps is 4D
 
     @staticmethod
     def _fetch_schaefer(n_rois: int = 100) -> Tuple[object, List[str]]:
         atlas = datasets.fetch_atlas_schaefer_2018(n_rois=n_rois)
         labels = [lbl.decode() if isinstance(lbl, bytes) else lbl
                   for lbl in atlas.labels]
-        return atlas.maps, labels
+        return atlas.maps, labels   # atlas.maps is 3D label image
