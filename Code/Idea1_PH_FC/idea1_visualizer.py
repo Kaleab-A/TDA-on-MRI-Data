@@ -113,7 +113,7 @@ class Idea1Visualizer(BaseVisualizer):
     # ------------------------------------------------------------------
 
     def plot_wasserstein_heatmap(
-        self, W: np.ndarray, labels: np.ndarray
+        self, W: np.ndarray, labels: np.ndarray, dim: int = 1
     ) -> None:
         """
         Clustered heatmap of pairwise Wasserstein distances.
@@ -139,8 +139,8 @@ class Idea1Visualizer(BaseVisualizer):
         ax.set_xticklabels(tick_labels, rotation=90, fontsize=6)
         ax.set_yticks(range(n))
         ax.set_yticklabels(tick_labels, fontsize=6)
-        ax.set_title("Pairwise Wasserstein Distance Matrix (H1)")
-        self.save_figure(fig, "wasserstein_heatmap.png")
+        ax.set_title(f"Pairwise Wasserstein Distance Matrix (H{dim})")
+        self.save_figure(fig, f"wasserstein_heatmap_H{dim}.png")
 
     # ------------------------------------------------------------------
     # Atlas scale comparison
@@ -183,15 +183,16 @@ class Idea1Visualizer(BaseVisualizer):
         tp_values: np.ndarray,
         cluster_labels: np.ndarray,
         adhd_labels: np.ndarray,
+        dim: int = 1,
     ) -> None:
-        """Scatter of H1 total persistence colored by cluster and ADHD status."""
+        """Scatter of H{dim} total persistence colored by cluster and ADHD status."""
         fig, axes = plt.subplots(1, 2, figsize=(10, 4))
         colors_cluster = ["#e8a09a", "#9abfe8"]
         for cl in np.unique(cluster_labels):
             mask = cluster_labels == cl
             axes[0].scatter(np.where(mask)[0], tp_values[mask],
                             c=colors_cluster[cl], label=f"Cluster {cl}", s=40, alpha=0.8)
-        axes[0].set_title("H1 Total Persistence by Cluster")
+        axes[0].set_title(f"H{dim} Total Persistence by Cluster")
         axes[0].set_xlabel("Subject index")
         axes[0].set_ylabel("Total Persistence")
         axes[0].legend()
@@ -200,7 +201,7 @@ class Idea1Visualizer(BaseVisualizer):
         axes[1].scatter(cluster_labels, tp_values, c=colors_adhd, s=40, alpha=0.8)
         axes[1].set_xlabel("Cluster")
         axes[1].set_ylabel("Total Persistence")
-        axes[1].set_title("Clusters vs ADHD Label")
+        axes[1].set_title(f"H{dim} Clusters vs ADHD Label")
         from matplotlib.lines import Line2D
         axes[1].legend(handles=[
             Line2D([0], [0], marker="o", color="w", markerfacecolor="#e8a09a",
@@ -209,4 +210,4 @@ class Idea1Visualizer(BaseVisualizer):
                    markersize=8, label="Control"),
         ])
         fig.tight_layout()
-        self.save_figure(fig, "subtype_clusters.png")
+        self.save_figure(fig, f"subtype_clusters_H{dim}.png")

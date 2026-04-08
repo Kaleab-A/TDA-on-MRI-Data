@@ -96,7 +96,7 @@ class PersistenceDistanceAnalyzer:
         rows = []
         results = {}
         for dim, diagrams in diagrams_per_dim.items():
-            tp = np.array([PHFCComputer.total_persistence(PHFCComputer, d) for d in diagrams])
+            tp = np.array([PHFCComputer.total_persistence(d) for d in diagrams])
             adhd_tp = tp[adhd_mask]
             ctrl_tp = tp[~adhd_mask]
             stats = StatisticsHelper.mann_whitney_u(adhd_tp, ctrl_tp)
@@ -146,7 +146,8 @@ class PersistenceDistanceAnalyzer:
     # ------------------------------------------------------------------
 
     def subtype_analysis_experiment(
-        self, diagrams: List[np.ndarray], records: List[SubjectRecord]
+        self, diagrams: List[np.ndarray], records: List[SubjectRecord],
+        dim: int = 1,
     ) -> dict:
         """
         Cluster ADHD subjects by H1 total persistence.
@@ -169,7 +170,7 @@ class PersistenceDistanceAnalyzer:
                 "adhd_measure": rec.adhd_measure,
             })
         df = pd.DataFrame(rows)
-        self.output_manager.save_dataframe(df, "subtype_clusters.csv")
+        self.output_manager.save_dataframe(df, f"subtype_clusters_H{dim}.csv")
 
         # Compute cluster separation score
         from sklearn.metrics import silhouette_score

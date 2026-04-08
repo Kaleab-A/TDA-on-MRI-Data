@@ -26,7 +26,8 @@ class FCMatrixBuilder:
     def __init__(self, params: Idea1Params):
         self.params = params
         self._connectivity_measure: ConnectivityMeasure = ConnectivityMeasure(
-            kind=params.correlation_kind
+            kind=params.correlation_kind,
+            standardize="zscore_sample",
         )
 
     # ------------------------------------------------------------------

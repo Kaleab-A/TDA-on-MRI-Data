@@ -86,26 +86,31 @@ class Idea1Orchestrator(BaseIdeaOrchestrator):
             results = self.analyzer.group_comparison_experiment(diagrams_per_dim, labels)
             self.visualizer.plot_total_persistence_comparison(results, dims=dims)
 
-            # Wasserstein heatmap (H1)
-            if 1 in diagrams_per_dim:
-                W = self.analyzer.compute_group_wasserstein_matrix(
-                    diagrams_per_dim[1], labels)
-                self.visualizer.plot_wasserstein_heatmap(W, labels)
+            # Wasserstein heatmap for every dimension
+            for dim in dims:
+                if dim in diagrams_per_dim:
+                    W = self.analyzer.compute_group_wasserstein_matrix(
+                        diagrams_per_dim[dim], labels)
+                    self.visualizer.plot_wasserstein_heatmap(W, labels, dim=dim)
 
         if self.params.run_h0_vs_h1:
             print("\n[Exp 2] H0 vs H1 comparison...")
             self.analyzer.h0_vs_h1_experiment(diagrams_per_dim)
 
-        if self.params.run_subtype_analysis and 1 in diagrams_per_dim:
-            print("\n[Exp 3] Subtype analysis (H1 clustering)...")
-            result = self.analyzer.subtype_analysis_experiment(
-                diagrams_per_dim[1], records)
-            tp_vals = np.array([
-                PHFCComputer.total_persistence(PHFCComputer, d)
-                for d in diagrams_per_dim[1]
-            ])
-            self.visualizer.plot_subtype_clusters(
-                tp_vals, result["cluster_labels"], labels)
+        if self.params.run_subtype_analysis:
+            print("\n[Exp 3] Subtype analysis (clustering per dimension)...")
+            for dim in dims:
+                if dim not in diagrams_per_dim:
+                    continue
+                print(f"  H{dim} clustering...")
+                result = self.analyzer.subtype_analysis_experiment(
+                    diagrams_per_dim[dim], records, dim=dim)
+                tp_vals = np.array([
+                    PHFCComputer.total_persistence(d)
+                    for d in diagrams_per_dim[dim]
+                ])
+                self.visualizer.plot_subtype_clusters(
+                    tp_vals, result["cluster_labels"], labels, dim=dim)
 
         if self.params.run_atlas_scale:
             print("\n[Exp 4] Atlas scale dependence...")

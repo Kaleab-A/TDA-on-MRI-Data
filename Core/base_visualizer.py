@@ -127,8 +127,9 @@ class BaseVisualizer:
             metric_name: np.concatenate([adhd_values, control_values]),
             "Group": ["ADHD"] * len(adhd_values) + ["Control"] * len(control_values),
         })
-        sns.boxplot(data=df, x="Group", y=metric_name, ax=ax,
-                    palette=["#e8a09a", "#9abfe8"], width=0.5)
+        sns.boxplot(data=df, x="Group", y=metric_name, hue="Group", ax=ax,
+                    palette={"ADHD": "#e8a09a", "Control": "#9abfe8"},
+                    width=0.5, legend=False)
         sns.stripplot(data=df, x="Group", y=metric_name, ax=ax,
                       color="black", alpha=0.5, size=4, jitter=True)
         title = metric_name
