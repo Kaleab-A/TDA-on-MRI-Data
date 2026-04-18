@@ -27,13 +27,22 @@ class BaseIdeaOrchestrator(ABC):
     """
 
     def __init__(self, params, n_subjects: int = 30,
-                 idea_name: Optional[str] = None):
+                 idea_name: Optional[str] = None,
+                 dataset_name: str = "ADHD"):
         self.params = params
-        self.loader = ADHDDataLoader(n_subjects=n_subjects)
+        self.dataset_name = dataset_name.upper()
+        self.case_label = getattr(params, "case_label", "ADHD")
+
+        if self.dataset_name == "ABIDE":
+            from Core.abide_loader import ABIDEDataLoader
+            self.loader = ABIDEDataLoader(n_subjects=n_subjects)
+        else:
+            self.loader = ADHDDataLoader(n_subjects=n_subjects)
+
         idea = idea_name or self.__class__.__name__.replace("Orchestrator", "")
         self.output_manager = OutputManager(
             idea_name=idea,
-            base_output_dir=_OUTPUT_ROOT,
+            base_output_dir=_OUTPUT_ROOT / self.dataset_name,
         )
 
     # ------------------------------------------------------------------

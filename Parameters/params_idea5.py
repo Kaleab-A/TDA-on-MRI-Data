@@ -11,7 +11,7 @@ from typing import List
 @dataclass
 class Idea5Params:
     # --- Data ---
-    n_subjects: int = 40
+    n_subjects: int = None
     atlas_name: str = "msdl"
     standardize: str = "zscore_sample"
     detrend: bool = True
@@ -52,6 +52,10 @@ class Idea5Params:
     # --- Statistics ---
     n_permutations: int = 1000
     alpha: float = 0.05
+
+    # --- Dataset ---
+    dataset_name: str = "ADHD"   # "ADHD" or "ABIDE" — selects loader + output subfolder
+    case_label: str = "ADHD"     # display name for group-1 subjects in plots/logs
 
     # --- Output ---
     output_dir: Path = Path("Output/Idea5")

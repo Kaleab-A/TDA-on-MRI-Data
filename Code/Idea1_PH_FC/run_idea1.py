@@ -8,6 +8,7 @@ Run from project root:
 
 from __future__ import annotations
 
+import pickle
 import sys
 from pathlib import Path
 from typing import List
@@ -32,11 +33,38 @@ class Idea1Orchestrator(BaseIdeaOrchestrator):
     """Orchestrates all Idea 1 experiments."""
 
     def __init__(self, params: Idea1Params):
-        super().__init__(params, n_subjects=params.n_subjects, idea_name="Idea1")
+        super().__init__(params, n_subjects=params.n_subjects, idea_name="Idea1",
+                         dataset_name=params.dataset_name)
         self.fc_builder = FCMatrixBuilder(params)
         self.ph_computer = PHFCComputer(params)
         self.analyzer = PersistenceDistanceAnalyzer(params, self.output_manager)
-        self.visualizer = Idea1Visualizer(self.output_manager)
+        self.visualizer = Idea1Visualizer(self.output_manager,
+                                          case_label=self.case_label)
+
+    # ------------------------------------------------------------------
+    # Caching helpers
+    # ------------------------------------------------------------------
+
+    def _diagrams_cache_path(self) -> Path:
+        return self.output_manager.idea_dir / "diagrams_cache.pkl"
+
+    def _load_diagrams_cache(self):
+        """Return cached diagrams list or None if not found."""
+        cache_path = self._diagrams_cache_path()
+        if cache_path.exists():
+            print(f"  Loading cached diagrams from {cache_path}")
+            with open(cache_path, "rb") as f:
+                return pickle.load(f)
+        return None
+
+    def _save_diagrams_cache(self, diagrams) -> None:
+        cache_path = self._diagrams_cache_path()
+        with open(cache_path, "wb") as f:
+            pickle.dump(diagrams, f)
+        print(f"  Cached diagrams saved to {cache_path}")
+
+    def _csv_exists(self, filename: str) -> bool:
+        return self.output_manager.get_csv_path(filename).exists()
 
     # ------------------------------------------------------------------
     # Main pipeline
@@ -54,9 +82,15 @@ class Idea1Orchestrator(BaseIdeaOrchestrator):
         dist_matrices = [r.distance_matrix for r in records]
         labels = self.loader.get_labels_array(records)
 
-        # 2. Compute persistence
-        print("\n[Step 2] Computing persistent homology...")
-        diagrams = self.ph_computer.fit_transform(dist_matrices)
+        # 2. Compute persistence (with caching)
+        cached = self._load_diagrams_cache()
+        if cached is not None and len(cached) == len(dist_matrices):
+            print("\n[Step 2] Loaded persistent homology from cache (skipping ripser).")
+            diagrams = cached
+        else:
+            print("\n[Step 2] Computing persistent homology...")
+            diagrams = self.ph_computer.fit_transform(dist_matrices)
+            self._save_diagrams_cache(diagrams)
 
         dims = list(range(self.params.max_dimension + 1))
         diagrams_per_dim = {
@@ -82,25 +116,55 @@ class Idea1Orchestrator(BaseIdeaOrchestrator):
 
         # 3. Experiments
         if self.params.run_group_comparison:
-            print("\n[Exp 1] Group comparison (ADHD vs Control)...")
-            results = self.analyzer.group_comparison_experiment(diagrams_per_dim, labels)
+            csv_name = "group_comparison_total_persistence.csv"
+            if self._csv_exists(csv_name):
+                print(f"\n[Exp 1] Skipping group comparison — {csv_name} already exists.")
+                # Still need results dict for plots; recompute cheaply without saving
+                results = self.analyzer.group_comparison_experiment(
+                    diagrams_per_dim, labels)
+            else:
+                print("\n[Exp 1] Group comparison...")
+                results = self.analyzer.group_comparison_experiment(
+                    diagrams_per_dim, labels)
             self.visualizer.plot_total_persistence_comparison(results, dims=dims)
 
             # Wasserstein heatmap for every dimension
             for dim in dims:
+                heatmap_file = f"wasserstein_heatmap_H{dim}.png"
+                if self.output_manager.get_plot_path(heatmap_file).exists():
+                    print(f"  Skipping Wasserstein heatmap H{dim} — already exists.")
+                    continue
                 if dim in diagrams_per_dim:
                     W = self.analyzer.compute_group_wasserstein_matrix(
                         diagrams_per_dim[dim], labels)
                     self.visualizer.plot_wasserstein_heatmap(W, labels, dim=dim)
 
         if self.params.run_h0_vs_h1:
-            print("\n[Exp 2] H0 vs H1 comparison...")
-            self.analyzer.h0_vs_h1_experiment(diagrams_per_dim)
+            csv_name = "h0_h1_h2_summary.csv"
+            if self._csv_exists(csv_name):
+                print(f"\n[Exp 2] Skipping H0/H1/H2 summary — {csv_name} already exists.")
+            else:
+                print("\n[Exp 2] H0 vs H1 comparison...")
+                self.analyzer.h0_vs_h1_experiment(diagrams_per_dim)
 
         if self.params.run_subtype_analysis:
             print("\n[Exp 3] Subtype analysis (clustering per dimension)...")
             for dim in dims:
                 if dim not in diagrams_per_dim:
+                    continue
+                csv_name = f"subtype_clusters_H{dim}.csv"
+                if self._csv_exists(csv_name):
+                    print(f"  Skipping H{dim} clustering — {csv_name} already exists.")
+                    # Still plot from existing data
+                    tp_vals = np.array([
+                        PHFCComputer.total_persistence(d)
+                        for d in diagrams_per_dim[dim]
+                    ])
+                    import pandas as pd
+                    df = pd.read_csv(self.output_manager.get_csv_path(csv_name))
+                    cluster_labels = df["cluster"].values
+                    self.visualizer.plot_subtype_clusters(
+                        tp_vals, cluster_labels, labels, dim=dim)
                     continue
                 print(f"  H{dim} clustering...")
                 result = self.analyzer.subtype_analysis_experiment(
@@ -116,7 +180,8 @@ class Idea1Orchestrator(BaseIdeaOrchestrator):
             print("\n[Exp 4] Atlas scale dependence...")
             self._run_atlas_scale_experiment()
 
-        print("\n=== Idea 1 complete. Outputs saved to Output/Idea1/ ===")
+        print(f"\n=== Idea 1 complete. Outputs saved to "
+              f"{self.output_manager.idea_dir}/ ===")
 
     # ------------------------------------------------------------------
     # Atlas scale experiment

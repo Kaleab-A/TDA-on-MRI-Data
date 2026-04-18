@@ -11,7 +11,7 @@ from typing import List
 @dataclass
 class Idea1Params:
     # --- Data ---
-    n_subjects: int = 30
+    n_subjects: int = 250
     atlas_name: str = "schaefer200"           # 'msdl' | 'schaefer100' | 'schaefer200'
     standardize: str = "zscore_sample"
     detrend: bool = True
@@ -46,6 +46,10 @@ class Idea1Params:
     atlas_names_sweep: List[str] = field(
         default_factory=lambda: ["msdl", "schaefer100", "schaefer200"]
     )
+
+    # --- Dataset ---
+    dataset_name: str = "ADHD"   # "ADHD" or "ABIDE" — selects loader + output subfolder
+    case_label: str = "ADHD"     # display name for group-1 subjects in plots/logs
 
     # --- Output ---
     output_dir: Path = Path("Output/Idea1")

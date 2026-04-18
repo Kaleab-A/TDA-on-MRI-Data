@@ -118,17 +118,18 @@ class BaseVisualizer:
         metric_name: str,
         ax: Optional[plt.Axes] = None,
         pvalue: Optional[float] = None,
+        case_label: str = "ADHD",
     ) -> plt.Axes:
-        """Boxplot + stripplot for ADHD vs control groups."""
+        """Boxplot + stripplot for case vs control groups."""
         import pandas as pd
         if ax is None:
             _, ax = plt.subplots(figsize=(5, 4))
         df = pd.DataFrame({
             metric_name: np.concatenate([adhd_values, control_values]),
-            "Group": ["ADHD"] * len(adhd_values) + ["Control"] * len(control_values),
+            "Group": [case_label] * len(adhd_values) + ["Control"] * len(control_values),
         })
         sns.boxplot(data=df, x="Group", y=metric_name, hue="Group", ax=ax,
-                    palette={"ADHD": "#e8a09a", "Control": "#9abfe8"},
+                    palette={case_label: "#e8a09a", "Control": "#9abfe8"},
                     width=0.5, legend=False)
         sns.stripplot(data=df, x="Group", y=metric_name, ax=ax,
                       color="black", alpha=0.5, size=4, jitter=True)
